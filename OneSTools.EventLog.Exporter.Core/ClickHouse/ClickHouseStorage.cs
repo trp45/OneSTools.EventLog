@@ -116,6 +116,7 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
                 throw new Exception("Connection string is not specified");
 
             _databaseName = Regex.Match(_connectionString, "(?<=Database=).*?(?=(;|$))", RegexOptions.IgnoreCase).Value;
+            
             _connectionString = Regex.Replace(_connectionString, "Database=.*?(;|$)", "");
 
             if (string.IsNullOrWhiteSpace(_databaseName))
@@ -140,16 +141,19 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
 
         private async Task CreateEventLogItemsDatabaseAsync(CancellationToken cancellationToken = default)
         {
-            var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {_databaseName}";
+            //var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {_databaseName}";
+            var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {TableName}";
+
 
             await using var cmdDb = _connection.CreateCommand();
             cmdDb.CommandText = commandDbText;
             await cmdDb.ExecuteNonQueryAsync(cancellationToken);
 
-            await _connection.ChangeDatabaseAsync(_databaseName, cancellationToken);
+//            await _connection.ChangeDatabaseAsync(_databaseName, cancellationToken);
+            await _connection.ChangeDatabaseAsync(TableName, cancellationToken);
 
             var commandText =
-                $@"CREATE TABLE IF NOT EXISTS {TableName}
+                $@"CREATE TABLE IF NOT EXISTS {_databaseName}
                 (
                     FileName LowCardinality(String),
                     EndPosition Int64 Codec(DoubleDelta, LZ4),
