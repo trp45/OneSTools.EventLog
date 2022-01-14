@@ -13,11 +13,12 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
 {
     public class ClickHouseStorage : IEventLogStorage
     {
-        private const string TableName = "EventLogItems";
+        private const string DataBaseName = "EventLogItems";
+        //private string _DataBaseName;
         private readonly ILogger<ClickHouseStorage> _logger;
         private ClickHouseConnection _connection;
         private string _connectionString;
-        private string _databaseName;
+        private string _tablename;
 
         public ClickHouseStorage(string connectionsString, ILogger<ClickHouseStorage> logger = null)
         {
@@ -40,7 +41,7 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
             await CreateConnectionAsync(cancellationToken);
 
             var commandText =
-                $"SELECT TOP 1 FileName, EndPosition, LgfEndPosition, Id FROM {TableName} ORDER BY Id DESC";
+                $"SELECT TOP 1 FileName, EndPosition, LgfEndPosition, Id FROM {_tablename} ORDER BY Id DESC";
 
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText = commandText;
@@ -60,7 +61,7 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
 
             using var copy = new ClickHouseBulkCopy(_connection)
             {
-                DestinationTableName = TableName,
+                DestinationTableName = _tablename,
                 BatchSize = entities.Count
             };
 
@@ -98,11 +99,11 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, $"Failed to write data to {_databaseName}");
+                _logger?.LogError(ex, $"Failed to write data to {DataBaseName}");
                 throw;
             }
 
-            _logger?.LogDebug($"{entities.Count} items were being written to {_databaseName}");
+            _logger?.LogDebug($"{entities.Count} items were being written to {DataBaseName}");
         }
 
         public void Dispose()
@@ -115,14 +116,13 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
             if (_connectionString == string.Empty)
                 throw new Exception("Connection string is not specified");
 
-            _databaseName = Regex.Match(_connectionString, "(?<=Database=).*?(?=(;|$))", RegexOptions.IgnoreCase).Value;
-            
+            _tablename = Regex.Match(_connectionString, "(?<=Database=).*?(?=(;|$))", RegexOptions.IgnoreCase).Value;            
             _connectionString = Regex.Replace(_connectionString, "Database=.*?(;|$)", "");
 
-            if (string.IsNullOrWhiteSpace(_databaseName))
+            if (string.IsNullOrWhiteSpace(_tablename))
                 throw new Exception("Database name is not specified");
             else
-                _databaseName = FixDatabaseName(_databaseName);
+                _tablename = FixDatabaseName(_tablename);
         }
 
         private static string FixDatabaseName(string name)
@@ -142,7 +142,7 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
         private async Task CreateEventLogItemsDatabaseAsync(CancellationToken cancellationToken = default)
         {
             //var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {_databaseName}";
-            var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {TableName}";
+            var commandDbText = $@"CREATE DATABASE IF NOT EXISTS {DataBaseName}";
 
 
             await using var cmdDb = _connection.CreateCommand();
@@ -150,10 +150,10 @@ namespace OneSTools.EventLog.Exporter.Core.ClickHouse
             await cmdDb.ExecuteNonQueryAsync(cancellationToken);
 
 //            await _connection.ChangeDatabaseAsync(_databaseName, cancellationToken);
-            await _connection.ChangeDatabaseAsync(TableName, cancellationToken);
+            await _connection.ChangeDatabaseAsync(DataBaseName, cancellationToken);
 
             var commandText =
-                $@"CREATE TABLE IF NOT EXISTS {_databaseName}
+                $@"CREATE TABLE IF NOT EXISTS {_tablename}
                 (
                     FileName LowCardinality(String),
                     EndPosition Int64 Codec(DoubleDelta, LZ4),
